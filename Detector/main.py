@@ -11,7 +11,6 @@ import cv2
 import tempfile
 import gc
 from json import load
-from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 from ultralytics import YOLO
 
@@ -60,8 +59,8 @@ except Exception as e:
     raise
 
 # Locks for controlling file writing state
-img_lock = Lock()
-vid_lock = Lock()
+img_lock = False
+vid_lock = False
 
 # Function to post files to the server
 def post_file_to_server(file_data: bytes, file_name: str, content_type: str):
@@ -77,53 +76,58 @@ def post_file_to_server(file_data: bytes, file_name: str, content_type: str):
 
 # Function to write images directly to memory and upload
 def write_img(frame):
-    with img_lock:
-        try:
-            _, img_encoded = cv2.imencode('.jpg', frame)
-            img_data = img_encoded.tobytes()
-            logger.info("Image prepared in-memory.")
-            post_file_to_server(img_data, 'tmp.jpg', 'image/jpeg')
-        except Exception as e:
-            logger.error(f"Error preparing image: {e}")
+    global img_lock
+    img_lock = True
+    try:
+        _, img_encoded = cv2.imencode('.jpg', frame)
+        img_data = img_encoded.tobytes()
+        logger.info("Image prepared in-memory.")
+        post_file_to_server(img_data, 'tmp.jpg', 'image/jpeg')
+    except Exception as e:
+        logger.error(f"Error preparing image: {e}")
+    finally:
+        img_lock = False
 
 # Function to write and post videos using separate cap
 def write_vid(rtsp_url, fps, width, height):
-    with vid_lock:
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video_file:
-                local_cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-                if not local_cap.isOpened():
-                    logger.error("Unable to open RTSP stream for video recording.")
-                    return
-                
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(temp_video_file.name, fourcc, fps, (width, height), True)
+    global vid_lock
+    vid_lock = True
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video_file:
+            local_cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+            if not local_cap.isOpened():
+                logger.error("Unable to open RTSP stream for video recording.")
+                return
+            
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(temp_video_file.name, fourcc, fps, (width, height), True)
 
-                count = 0
-                while count < 10 * fps:  # Record 10 seconds of video
-                    ret, frame = local_cap.read()
-                    if ret:
-                        out.write(frame)
-                        count += 1
-                    else:
-                        logger.error("Failed to read frame from RTSP stream.")
-                        break
+            count = 0
+            while count < 10 * fps:  # Record 10 seconds of video
+                ret, frame = local_cap.read()
+                if ret:
+                    out.write(frame)
+                    count += 1
+                else:
+                    logger.error("Failed to read frame from RTSP stream.")
+                    break
 
-                out.release()
-                local_cap.release()
+            out.release()
+            local_cap.release()
 
-                # Upload the video file
-                with open(temp_video_file.name, 'rb') as f:
-                    video_data = f.read()
-                    if video_data:
-                        post_file_to_server(video_data, 'temp_video.mp4', 'video/mp4')
-        except Exception as e:
-            logger.error(f"Error preparing video: {e}")
-        finally:
-            if 'out' in locals():
-                out.release()
-            if os.path.exists(temp_video_file.name):
-                os.unlink(temp_video_file.name)  # Ensure temporary file is deleted
+            # Upload the video file
+            with open(temp_video_file.name, 'rb') as f:
+                video_data = f.read()
+                if video_data:
+                    post_file_to_server(video_data, 'temp_video.mp4', 'video/mp4')
+    except Exception as e:
+        logger.error(f"Error preparing video: {e}")
+    finally:
+        vid_lock = False
+        if 'out' in locals():
+            out.release()
+        if os.path.exists(temp_video_file.name):
+            os.unlink(temp_video_file.name)  # Ensure temporary file is deleted
 
 # Main video processing loop
 def process_stream():
@@ -152,8 +156,10 @@ def process_stream():
                         )[0]
 
                         if len(result.boxes):
-                            executor.submit(write_img, frame)
-                            executor.submit(write_vid, RTSP, fps, width, height)
+                            if not img_lock:
+                                executor.submit(write_img, frame)
+                            if not vid_lock:
+                                executor.submit(write_vid, RTSP, fps, width, height)
 
                         n_gc = gc.collect()
                         if n_gc:
