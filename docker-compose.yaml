@@ -1,0 +1,57 @@
+services:
+  api:
+    container_name: ai-camera-api-gateway
+    build: './API'
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 1
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/static:rw
+      - ./rtsp.json:/app/rtsp.json:ro
+
+  detector1:
+    container_name: ai-camera-detector1
+    build: './Detector'
+    restart: always
+    environment:
+      ID: cam-0001
+    env_file:
+      - .env
+    volumes:
+      - ./rtsp.json:/app/rtsp.json:ro
+    ipc: host
+    devices:
+      - "/dev/nvidia0:/dev/nvidia0"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 1
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            capabilities: [gpu]
+
+  ui:
+    container_name: ai-camera-ui
+    build: "./Streamlit"
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 1
+    ports:
+      - 8501:8501
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/static:ro
+      - ./rtsp.json:/app/rtsp.json:ro

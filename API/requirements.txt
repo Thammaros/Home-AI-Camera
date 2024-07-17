@@ -1,0 +1,8 @@
+python-multipart
+httpx
+opencv-python
+Pillow
+fastapi
+uvicorn
+numpy
+aiofiles
