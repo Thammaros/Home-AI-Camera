@@ -1,0 +1,8 @@
+streamlit
+opencv-python
+Pillow
+streamlit-option-menu
+asyncio
+watchdog
+moviepy
+streamlit-webrtc

@@ -1,0 +1,30 @@
+[theme]
+base="light"
+
+[server]
+folderWatchBlacklist = []
+fileWatcherType = "none"
+headless = true
+runOnSave = false
+address = "0.0.0.0"
+port = 8501
+baseUrlPath = ""
+enableCORS = true
+enableXsrfProtection = true
+maxUploadSize = 500
+maxMessageSize = 200
+enableWebsocketCompression = true
+enableStaticServing = false
+
+[client]
+showErrorDetails = false
+toolbarMode = "viewer"
+
+[runner]
+fastReruns = true
+enforceSerializableSessionState = true
+
+[browser]
+serverAddress = "localhost"
+gatherUsageStats = false
+serverPort = 8501
