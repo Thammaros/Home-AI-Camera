@@ -32,7 +32,7 @@ async def upload_file(fileToUpload: UploadFile, background_tasks: BackgroundTask
 
         # Process based on the file type
         if file_type in {'mp4', 'mov'}:
-            await process_video(camera_id, time_now, content, file_type)
+            background_tasks.add_task(process_video, camera_id, time_now, content, file_type)
         elif file_type in {'jpg', 'png', 'jpeg'}:
             background_tasks.add_task(process_image, camera_id, time_now, content)
         return {"message": f"File {fileToUpload.filename} uploaded successfully"}
